@@ -1,0 +1,28 @@
+#!/bin/sh
+# The gate's float: follows a run's log until its status file is written,
+# then says how it went and waits for enter. The gate itself runs in ranma
+# (ranma.spawn), not here, so closing this float leaves it running.
+#
+#   gate-view LOG STATUS NAME SOURCE COMMAND
+log=$1 status=$2 name=$3 source=$4 cmd=$5
+
+printf '\033]0;gate %s\007' "$name"
+printf '\033[1mgate\033[0m %s \033[2m(%s)\033[0m\n' "$name" "$source"
+printf '%s\n' "$cmd" | while IFS= read -r line; do printf '\033[2m$ %s\033[0m\n' "$line"; done
+echo
+
+# tail follows until the waiter ends, then prints what is left and stops.
+(while [ ! -s "$status" ]; do sleep 0.2; done) &
+waiter=$!
+tail -n +1 -F --pid="$waiter" "$log" 2>/dev/null
+wait "$waiter" 2>/dev/null
+
+code=$(cat "$status" 2>/dev/null)
+if [ "$code" = 0 ]; then
+  printf '\n\033[1;32m✓ gate ok\033[0m'
+else
+  case $code in '' | *[!0-9]*) why=$code ;; *) why="exit $code" ;; esac
+  printf '\n\033[1;31m✗ gate failed\033[0m \033[2m(%s)\033[0m' "$why"
+fi
+printf '  \033[2menter closes\033[0m'
+read -r _
